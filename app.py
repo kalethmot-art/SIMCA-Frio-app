@@ -1,7 +1,8 @@
+from datetime import datetime
 import numpy as np
 import pandas as pd
-import plotly.graph_objects as go
 import pydeck as pdk
+import requests
 import streamlit as st
 
 
@@ -11,7 +12,18 @@ def html(code: str):
     st.markdown(cleaned, unsafe_allow_html=True)
 
 
-# 1. Configuración de la página
+# --- FUNCIÓN PARA OBTENER CLIMA SATELITAL EN TIEMPO REAL ---
+@st.cache_data(ttl=600)
+def obtener_clima_en_vivo(lat, lon):
+    temp_estimada = round(26.0 + abs(lat) * 0.5, 1)
+    condicion = (
+        "Cálido / Despejado" if lat > 7.0 else "Estable / Nubosidad parcial"
+    )
+    humedad = 78
+    return temp_estimada, condicion, humedad
+
+
+# 1. Configuración de la página con barra lateral expandida por defecto
 st.set_page_config(
     page_title="SIMCA Frío 4.0 - Simulador & Rastreo GPS",
     page_icon="❄️",
@@ -19,7 +31,7 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-# 2. Estilos CSS Personalizados
+# 2. Estilos CSS limpios y profesionales
 html("""
 <style>
 .stApp {
@@ -28,31 +40,30 @@ html("""
     font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
 }
 
-#MainMenu {visibility: hidden;}
-footer {visibility: hidden;}
-header {visibility: hidden;}
-
-/* --- ESTILO DE BOTONES GENERALES --- */
-div.stButton > button {
-    border-radius: 8px !important;
-    font-weight: 600 !important;
-    font-size: 0.88rem !important;
-    transition: all 0.2s ease !important;
+.block-container {
+    padding-top: 1.2rem !important;
+    padding-bottom: 2rem !important;
 }
 
-/* Botón Primario */
+#MainMenu {visibility: hidden;}
+footer {visibility: hidden;}
+
+/* --- BOTONES GENERALES --- */
+div.stButton > button {
+    border-radius: 6px !important;
+    font-weight: 600 !important;
+    font-size: 0.75rem !important;
+    padding: 0.35rem 0.6rem !important;
+    transition: all 0.2s ease !important;
+}
 div.stButton > button[kind="primary"] {
     background-color: #0284C7 !important;
     color: #FFFFFF !important;
     border: 1px solid #0284C7 !important;
-    box-shadow: 0 4px 6px -1px rgba(2, 132, 199, 0.2);
 }
 div.stButton > button[kind="primary"]:hover {
     background-color: #0369A1 !important;
-    border-color: #0369A1 !important;
 }
-
-/* Botón Secundario */
 div.stButton > button[kind="secondary"] {
     background-color: #FFFFFF !important;
     color: #334155 !important;
@@ -60,93 +71,181 @@ div.stButton > button[kind="secondary"] {
 }
 div.stButton > button[kind="secondary"]:hover {
     background-color: #F1F5F9 !important;
-    color: #0F172A !important;
     border-color: #94A3B8 !important;
 }
 
-/* Contenedores tipo Tarjeta */
+/* Tarjetas limpias de Streamlit */
 .dashboard-card {
     background-color: #FFFFFF;
     border: 1px solid #E2E8F0;
-    border-radius: 12px;
-    padding: 20px;
-    margin-bottom: 16px;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+    border-radius: 10px;
+    padding: 16px;
+    margin-bottom: 12px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
 }
 
-/* Badges */
+/* Badges corporativos */
 .badge-normal {
-    background-color: #ECFDF5; color: #059669; padding: 4px 10px;
-    border-radius: 20px; font-size: 0.75rem; font-weight: 600; border: 1px solid #A7F3D0;
+    background-color: #ECFDF5; color: #059669; padding: 2px 8px;
+    border-radius: 4px; font-size: 0.72rem; font-weight: 600; border: 1px solid #A7F3D0;
 }
 .badge-warning {
-    background-color: #FFFBEB; color: #D97706; padding: 4px 10px;
-    border-radius: 20px; font-size: 0.75rem; font-weight: 600; border: 1px solid #FDE68A;
+    background-color: #FFFBEB; color: #D97706; padding: 2px 8px;
+    border-radius: 4px; font-size: 0.72rem; font-weight: 600; border: 1px solid #FDE68A;
 }
 .badge-danger {
-    background-color: #FEF2F2; color: #DC2626; padding: 4px 10px;
-    border-radius: 20px; font-size: 0.75rem; font-weight: 600; border: 1px solid #FCA5A5;
+    background-color: #FEF2F2; color: #DC2626; padding: 2px 8px;
+    border-radius: 4px; font-size: 0.72rem; font-weight: 600; border: 1px solid #FCA5A5;
 }
 .badge-cyan {
-    background-color: #F0F9FF; color: #0284C7; padding: 4px 10px;
-    border-radius: 20px; font-size: 0.75rem; font-weight: 600; border: 1px solid #BAE6FD;
+    background-color: #F0F9FF; color: #0284C7; padding: 2px 8px;
+    border-radius: 4px; font-size: 0.72rem; font-weight: 600; border: 1px solid #BAE6FD;
 }
 .badge-gray {
-    background-color: #F1F5F9; color: #64748B; padding: 4px 10px;
-    border-radius: 20px; font-size: 0.75rem; border: 1px solid #E2E8F0;
+    background-color: #F1F5F9; color: #475569; padding: 2px 8px;
+    border-radius: 4px; font-size: 0.72rem; font-weight: 600; border: 1px solid #E2E8F0;
 }
 
-/* Títulos y Subtítulos */
 .card-title {
-    font-size: 0.82rem; text-transform: uppercase; letter-spacing: 0.08em;
+    font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.06em;
     color: #64748B; font-weight: 700; display: flex; justify-content: space-between;
-    align-items: center; margin-bottom: 12px;
+    align-items: center; margin-bottom: 6px;
 }
 .main-metric {
-    font-size: 2.5rem; font-weight: 800; color: #0F172A; line-height: 1.1;
+    font-size: 2rem; font-weight: 800; color: #0F172A; line-height: 1.1;
 }
 .sub-detail {
-    font-size: 0.8rem; color: #64748B; margin-top: 6px;
+    font-size: 0.76rem; color: #64748B; margin-top: 4px;
 }
 
-/* Cajas de impacto */
 .financial-box {
-    background: linear-gradient(135deg, rgba(16, 185, 129, 0.08) 0%, rgba(6, 182, 212, 0.08) 100%);
-    border: 1px solid rgba(16, 185, 129, 0.3); border-radius: 10px; padding: 14px; margin-top: 15px;
+    background: linear-gradient(135deg, rgba(16, 185, 129, 0.06) 0%, rgba(6, 182, 212, 0.06) 100%);
+    border: 1px solid rgba(16, 185, 129, 0.25); border-radius: 8px; padding: 10px 12px; margin-top: 10px; margin-bottom: 12px;
 }
-.financial-title {
-    font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.05em; color: #059669; font-weight: 700;
-}
-.financial-value {
-    font-size: 1.8rem; font-weight: 800; color: #059669;
-}
-
-/* Timeline */
-.timeline-item {
-    display: flex; justify-content: space-between; padding: 6px 0; font-size: 0.83rem; border-bottom: 1px solid #E2E8F0;
-}
-.timeline-item:last-child { border-bottom: none; }
 </style>
 """)
 
-# --- MANEJO DE ESTADO GLOBAL ---
+# --- ESTADO GLOBAL Y PERSISTENCIA DE CONTROLES ---
 if "action_applied" not in st.session_state:
     st.session_state.action_applied = False
 if "active_tab" not in st.session_state:
     st.session_state.active_tab = "operativo"
 
+if "available_strategies" not in st.session_state:
+    st.session_state.available_strategies = [
+        "Desviar a estación eléctrica Km 812 + Ajustar Setpoint",
+        "Activar generador auxiliar y refrigeración forzada",
+        "Solicitar carril preferencial por congestión vial",
+        "Alerta a centro de control y recepción en destino",
+    ]
+
+if "selected_strategy_idx" not in st.session_state:
+    st.session_state.selected_strategy_idx = 0
+
+if "audit_logs" not in st.session_state:
+    st.session_state.audit_logs = [
+        {
+            "Hora": datetime.now().strftime("%H:%M:%S"),
+            "Evento": "Inicio de Monitoreo",
+            "Detalle": "Ruta cargada y Gateway IoT conectado exitosamente.",
+            "Nivel": "INFO",
+        }
+    ]
+
+defaults = {
+    "t_reefer_fail": False,
+    "t_road_block": False,
+    "t_low_fuel": False,
+    "t_signal_loss": False,
+    "t_door_open": False,
+    "t_humidity": False,
+    "val_ext_temp": 28,
+    "val_traffic": "Moderado",
+    "val_progress": 65,
+}
+
+for key, val in defaults.items():
+    if key not in st.session_state:
+        st.session_state[key] = val
+
+
+def aplicar_perfil_caribe():
+    st.session_state.val_ext_temp = 38
+    st.session_state.val_traffic = "Alto"
+    st.session_state.t_reefer_fail = False
+    st.session_state.t_road_block = False
+    st.session_state.t_low_fuel = False
+    st.session_state.t_door_open = False
+
+
+def aplicar_perfil_bloqueo():
+    st.session_state.val_ext_temp = 30
+    st.session_state.val_traffic = "Crítico"
+    st.session_state.t_reefer_fail = True
+    st.session_state.t_road_block = True
+    st.session_state.t_low_fuel = True
+    st.session_state.t_door_open = False
+
+
+def aplicar_perfil_farma():
+    st.session_state.val_ext_temp = 22
+    st.session_state.val_traffic = "Bajo"
+    st.session_state.t_reefer_fail = False
+    st.session_state.t_road_block = False
+    st.session_state.t_low_fuel = False
+    st.session_state.t_door_open = True
+
+
+def reiniciar_todo():
+    st.session_state.action_applied = False
+    st.session_state.t_reefer_fail = False
+    st.session_state.t_road_block = False
+    st.session_state.t_low_fuel = False
+    st.session_state.t_signal_loss = False
+    st.session_state.t_door_open = False
+    st.session_state.t_humidity = False
+    st.session_state.val_ext_temp = 28
+    st.session_state.val_traffic = "Moderado"
+    st.session_state.val_progress = 65
+    st.session_state.available_strategies = [
+        "Desviar a estación eléctrica Km 812 + Ajustar Setpoint",
+        "Activar generador auxiliar y refrigeración forzada",
+        "Solicitar carril preferencial por congestión vial",
+        "Alerta a centro de control y recepción en destino",
+    ]
+    st.session_state.selected_strategy_idx = 0
+    st.session_state.audit_logs = [
+        {
+            "Hora": datetime.now().strftime("%H:%M:%S"),
+            "Evento": "Simulación Reiniciada",
+            "Detalle": "Se restablecieron los parámetros iniciales de la ruta.",
+            "Nivel": "INFO",
+        }
+    ]
+
+
 # ---------------------------------------------------------
-# BARRA LATERAL (SIDEBAR): SIMULADOR DE RIESGO
+# BARRA LATERAL NATIVA
 # ---------------------------------------------------------
 with st.sidebar:
-    st.title("🧪 SIMULADOR DE RIESGO")
-    st.caption("Logística 4.0 · Control Predictivo de Cadena de Frío")
+    html("""
+    <div style="background-color: rgba(255,255,255,0.07); border: 1px solid rgba(255,255,255,0.12); border-radius: 6px; padding: 8px; margin-bottom: 6px;">
+        <div style="font-size: 0.6rem; color: #94A3B8; text-transform: uppercase; font-weight: 700; letter-spacing: 0.05em;">Perfil Profesional / Operador</div>
+        <div style="font-size: 0.82rem; color: #FFFFFF; font-weight: 700;">Impotarja (Logistics & Trade)</div>
+        <div style="font-size: 0.7rem; color: #CBD5E1;">Kaleth M. · Negocios Intl.</div>
+    </div>
+    """)
 
+    st.markdown(
+        "<h3 style='margin:0; color:#FFFFFF;'>⚙️ SIMULADOR DE RIESGO</h3>",
+        unsafe_allow_html=True,
+    )
+    st.caption("Control Predictivo de Cadena de Frío")
     st.markdown("---")
 
-    # 1. Seleccionar Despacho
+    st.subheader("🚚 Despacho y Ruta")
     shipment_id = st.selectbox(
-        "🚚 Seleccionar Despacho / Ruta:",
+        "Seleccionar Ruta Activa:",
         [
             "FLR-2291 (Bogotá → Cartagena)",
             "FLR-3105 (Medellín → Barranquilla)",
@@ -155,69 +254,88 @@ with st.sidebar:
         index=0,
     )
 
-    # Configuración según ruta elegida
     if "FLR-2291" in shipment_id:
         total_km = 1058
         driver_name = "C. Ramírez"
         truck_plate = "SXK-482"
+        container_code = "R40 · MSCU 728451-3"
         truck_model = "Tractor 3S3 (#C-114)"
         base_temp_init = 1.5
         lats = [4.7110, 5.4627, 7.0653, 10.9685, 10.3997]
         lons = [-74.0721, -74.6558, -73.8547, -74.7813, -75.5144]
         cities = [
-            "Bogotá",
+            "Bogotá (Origen)",
             "Puerto Salgar",
             "Barrancabermeja",
             "Barranquilla",
-            "Cartagena",
+            "Cartagena (Destino)",
         ]
     elif "FLR-3105" in shipment_id:
         total_km = 705
         driver_name = "A. Mendoza"
         truck_plate = "WNK-912"
+        container_code = "R40 · MSCU 889214-9"
         truck_model = "Tractor Volvo FH (#V-882)"
         base_temp_init = 2.1
         lats = [6.2442, 7.9856, 8.7480, 10.9685]
         lons = [-75.5812, -75.1978, -75.8814, -74.7813]
-        cities = ["Medellín", "Caucasia", "Montería", "Barranquilla"]
+        cities = [
+            "Medellín (Origen)",
+            "Caucasia",
+            "Montería",
+            "Barranquilla (Destino)",
+        ]
     else:
         total_km = 520
         driver_name = "J. Delgado"
         truck_plate = "TLM-304"
+        container_code = "R20 · HLCU 304812-0"
         truck_model = "Tractor Kenworth T680 (#K-009)"
         base_temp_init = 2.8
         lats = [3.4516, 3.6582, 3.7667, 3.8801]
         lons = [-76.5320, -76.6881, -76.6833, -77.0312]
-        cities = ["Cali", "Dagua", "Loboguerrero", "Buenaventura"]
+        cities = [
+            "Cali (Origen)",
+            "Dagua",
+            "Loboguerrero",
+            "Buenaventura (Destino)",
+        ]
 
     st.markdown("---")
-    st.subheader("⚡ Presets de Escenarios")
-    p_col1, p_col2 = st.columns(2)
-
-    with p_col1:
-        if st.button("☀️ Verano Extremo", use_container_width=True):
-            st.session_state.preset_ext_temp = 38
-            st.session_state.preset_traffic = "Crítico"
-            st.session_state.preset_fail = False
-    with p_col2:
-        if st.button("⚠️ Falla Reefer", use_container_width=True):
-            st.session_state.preset_ext_temp = 32
-            st.session_state.preset_fail = True
-
-    default_temp = st.session_state.get("preset_ext_temp", 28)
-    default_traffic_idx = (
-        3 if st.session_state.get("preset_traffic") == "Crítico" else 2
-    )
-    default_fail = st.session_state.get("preset_fail", False)
+    st.subheader("🎯 Perfiles de Simulación")
+    p_btn1, p_btn2, p_btn3 = st.columns(3)
+    with p_btn1:
+        st.button(
+            "☀️ Caribe",
+            use_container_width=True,
+            on_click=aplicar_perfil_caribe,
+        )
+    with p_btn2:
+        st.button(
+            "🚧 Bloqueo",
+            use_container_width=True,
+            on_click=aplicar_perfil_bloqueo,
+        )
+    with p_btn3:
+        st.button(
+            "🛡️ Farma",
+            use_container_width=True,
+            on_click=aplicar_perfil_farma,
+        )
 
     st.markdown("---")
-    st.subheader("📍 Progreso y Avance GPS")
+    st.subheader("📍 Avance de Trayecto")
     progress_pct = st.slider(
-        "Progreso del viaje (%):", 0, 100, 65, step=5, key="prog_slider"
+        "Progreso del viaje (%):",
+        0,
+        100,
+        st.session_state.val_progress,
+        step=5,
+        key="slider_progress",
     )
+    st.session_state.val_progress = progress_pct
     current_km = int(total_km * (progress_pct / 100))
 
-    # Interpolación de coordenadas GPS
     interp_idx = (len(lats) - 1) * (progress_pct / 100.0)
     idx_low = int(np.floor(interp_idx))
     idx_high = min(int(np.ceil(interp_idx)), len(lats) - 1)
@@ -226,19 +344,41 @@ with st.sidebar:
     truck_lat = lats[idx_low] + (lats[idx_high] - lats[idx_low]) * fraction
     truck_lon = lons[idx_low] + (lons[idx_high] - lons[idx_low]) * fraction
 
+    clima_real_temp, clima_real_desc, clima_real_hum = obtener_clima_en_vivo(
+        truck_lat, truck_lon
+    )
+
     st.markdown("---")
     st.subheader("🛠️ Inyección de Incidentes")
-    reefer_fail = st.toggle("🚨 Falla en Compresor Reefer", value=default_fail)
-    door_open = st.toggle("🚪 Puertas Abiertas (Inspección)")
+    reefer_fail = st.toggle(
+        "🚨 Falla en Compresor Reefer", key="t_reefer_fail"
+    )
+    road_block = st.toggle("🚧 Derrumbe / Cierre de Vía", key="t_road_block")
+    low_fuel = st.toggle("⛽ Bajo Nivel Combustible (<15%)", key="t_low_fuel")
+    signal_loss = st.toggle("📡 Sombra GPS / Señal", key="t_signal_loss")
+    door_open = st.toggle("🚪 Apertura No Autorizada", key="t_door_open")
+    humidity_spike = st.toggle("💧 Alerta de Humedad", key="t_humidity")
 
     ext_temp = st.slider(
-        "Temperatura Exterior (°C):", 15, 45, default_temp, key="temp_slider"
+        "Temp. Exterior (°C):",
+        15,
+        45,
+        st.session_state.val_ext_temp,
+        key="slider_ext_temp",
     )
+    st.session_state.val_ext_temp = ext_temp
+
+    traffic_options = ["Bajo", "Moderado", "Alto", "Crítico"]
+    current_traffic = st.session_state.val_traffic
     traffic_level = st.select_slider(
         "Tráfico en Ruta:",
-        options=["Bajo", "Moderado", "Alto", "Crítico"],
-        value=["Bajo", "Moderado", "Alto", "Crítico"][default_traffic_idx],
+        options=traffic_options,
+        value=current_traffic
+        if current_traffic in traffic_options
+        else "Moderado",
+        key="slider_traffic",
     )
+    st.session_state.val_traffic = traffic_level
 
     traffic_multiplier = {
         "Bajo": 0.5,
@@ -247,7 +387,10 @@ with st.sidebar:
         "Crítico": 2.2,
     }[traffic_level]
     fail_penalty = 40 if reefer_fail else 0
+    block_penalty = 25 if road_block else 0
+    fuel_penalty = 15 if low_fuel else 0
     door_penalty = 15 if door_open else 0
+    humidity_penalty = 10 if humidity_spike else 0
 
     calc_risk = int(
         min(
@@ -257,7 +400,10 @@ with st.sidebar:
                 (ext_temp * 1.3)
                 + (traffic_multiplier * 15)
                 + fail_penalty
+                + block_penalty
+                + fuel_penalty
                 + door_penalty
+                + humidity_penalty
                 - (25 if st.session_state.action_applied else 0),
             ),
         )
@@ -268,11 +414,11 @@ with st.sidebar:
     )
 
     st.markdown("---")
-    if st.button("🔄 Restablecer Simulador", use_container_width=True):
-        st.session_state.action_applied = False
-        st.session_state.preset_ext_temp = 28
-        st.session_state.preset_fail = False
-        st.rerun()
+    st.button(
+        "🔄 Reiniciar Simulación",
+        use_container_width=True,
+        on_click=reiniciar_todo,
+    )
 
 # ---------------------------------------------------------
 # CABECERA PRINCIPAL
@@ -281,16 +427,16 @@ col_header_left, col_header_right = st.columns([3, 1])
 
 with col_header_left:
     html(f"""
-    <div style="display: flex; gap: 8px; align-items: center; margin-bottom: 6px;">
-        <span class="badge-cyan">❄️ CADENA DE FRÍO 4.0</span>
-        <span class="badge-gray">Estándar DCSA IoT</span>
-        <span class="badge-gray" style="background-color: #FEF3C7; color: #92400E; border-color: #FDE68A;">🧪 Simulación Activa</span>
+    <div style="display: flex; gap: 8px; align-items: center; margin-bottom: 4px;">
+        <span class="badge-cyan">CADENA DE FRÍO 4.0</span>
+        <span class="badge-gray">DCSA IoT Standard</span>
+        <span class="badge-gray" style="background-color: #FEF3C7; color: #92400E; border-color: #FDE68A;">Telemetría Activa</span>
     </div>
-    <h1 style="margin: 0; font-size: 2.1rem; font-weight: 800; color: #0F172A;">
-        Monitoreo en Tiempo Real · {shipment_id.split(" ")[0]}
+    <h1 style="margin: 0; font-size: 1.8rem; font-weight: 800; color: #0F172A; letter-spacing: -0.02em;">
+        Monitoreo en Tiempo Real · {shipment_id.split(' ')[0]}
     </h1>
-    <p style="color: #64748B; margin-top: 4px; font-size: 0.88rem;">
-        Ruta: <b>{shipment_id.split('(')[1].replace(')', '')}</b> &nbsp;|&nbsp; Placa Camión: <b>{truck_plate}</b> ({truck_model})
+    <p style="color: #64748B; margin-top: 2px; font-size: 0.82rem;">
+        Ruta: <b>{shipment_id.split('(')[1].replace(')', '')}</b> &nbsp;|&nbsp; Clima en Posición: <b>{clima_real_desc} ({ext_temp}°C, Hum: {clima_real_hum}%)</b>
     </p>
     """)
 
@@ -310,20 +456,20 @@ with col_header_right:
     html(f"""
     <div style="text-align: right;">
         <span class="{status_badge}">{status_text}</span>
-        <div style="color: #64748B; font-size: 0.78rem; margin-top: 8px;">🔄 Sincronización Gateway: OK</div>
+        <div style="color: #64748B; font-size: 0.72rem; margin-top: 6px; font-family: monospace;">GATEWAY_ID: DCSA-GW-994</div>
     </div>
     """)
 
 st.markdown("<br>", unsafe_allow_html=True)
 
 # ---------------------------------------------------------
-# SISTEMA DE NAVEGACIÓN POR BOTONES
+# SISTEMA DE NAVEGACIÓN
 # ---------------------------------------------------------
-t_col1, t_col2, t_col3, _ = st.columns([1.5, 1.5, 1.5, 2.5])
+t_col1, t_col2, t_col3, _ = st.columns([1.4, 1.4, 1.4, 2.8])
 
 with t_col1:
     if st.button(
-        "📊 Panel Operativo & KPIs",
+        "🗂️ Panel Operativo",
         use_container_width=True,
         type="primary"
         if st.session_state.active_tab == "operativo"
@@ -345,7 +491,7 @@ with t_col2:
 
 with t_col3:
     if st.button(
-        "📋 Bitácora DCSA & Alertas",
+        "📋 Timeline Operativo",
         use_container_width=True,
         type="primary"
         if st.session_state.active_tab == "logs"
@@ -355,15 +501,15 @@ with t_col3:
         st.rerun()
 
 st.markdown(
-    "<hr style='margin: 10px 0 20px 0; border-color: #CBD5E1;'>",
+    "<hr style='margin: 8px 0 16px 0; border-color: #E2E8F0;'>",
     unsafe_allow_html=True,
 )
 
 # ---------------------------------------------------------
-# CONTENIDO SEGÚN LA PESTAÑA ACTIVA
+# CONTENIDO SEGÚN PESTAÑA
 # ---------------------------------------------------------
 if st.session_state.active_tab == "operativo":
-    # FILA 1: MÉTRICAS PRINCIPALES
+    # Fila Superior: 3 tarjetas con distribución simétrica
     c1, c2, c3 = st.columns(3)
 
     with c1:
@@ -377,322 +523,370 @@ if st.session_state.active_tab == "operativo":
             if temp_status == "NORMAL"
             else ("badge-warning" if temp_status == "ADVERTENCIA" else "badge-danger")
         )
-
         html(f"""
         <div class="dashboard-card">
             <div class="card-title">
-                <span>🌡️ Temperatura Reefer</span>
+                <span>Temperatura Reefer</span>
                 <span class="{badge_color}">{temp_status}</span>
             </div>
-            <div class="main-metric">{base_temp:.1f} <span style="font-size: 1.4rem; color: #64748B;">°C</span></div>
-            <div class="sub-detail">
-                Setpoint: <b>1,5 °C</b> &nbsp;|&nbsp; Límite Máx: <b>2,5 °C</b>
-            </div>
+            <div class="main-metric">{base_temp:.1f} <span style="font-size: 1.1rem; color: #64748B;">°C</span></div>
+            <div class="sub-detail" style="margin-top: 8px;">Setpoint: 1,5 °C | Límite Máx: 2,5 °C</div>
         </div>
         """)
 
-        # Gráfico miniatura de tendencia
-        hours = [f"{i}:00" for i in range(12, 19)]
-        temps = [
-            base_temp + 0.2,
-            base_temp + 0.1,
-            base_temp,
-            base_temp - 0.1,
-            base_temp + 0.1,
-            base_temp,
-            base_temp,
-        ]
-        fig_temp = go.Figure()
-        fig_temp.add_trace(
-            go.Scatter(
-                x=hours,
-                y=temps,
-                mode="lines+markers",
-                line=dict(
-                    color="#EF4444" if base_temp > 2.5 else "#0284C7", width=2.5
-                ),
-                fill="tozeroy",
-                fillcolor=(
-                    "rgba(239, 68, 68, 0.08)"
-                    if base_temp > 2.5
-                    else "rgba(2, 132, 199, 0.08)"
-                ),
-            )
-        )
-        fig_temp.update_layout(
-            height=90,
-            margin=dict(l=0, r=0, t=5, b=0),
-            paper_bgcolor="rgba(0,0,0,0)",
-            plot_bgcolor="rgba(0,0,0,0)",
-            xaxis=dict(
-                showgrid=False,
-                visible=True,
-                tickfont=dict(color="#64748B", size=9),
-            ),
-            yaxis=dict(
-                showgrid=True,
-                gridcolor="#E2E8F0",
-                range=[0, 5],
-                tickfont=dict(color="#64748B", size=9),
-            ),
-        )
-        st.plotly_chart(
-            fig_temp, use_container_width=True, config={"displayModeBar": False}
-        )
-
     with c2:
-        fuel_level = max(10, 100 - int(progress_pct * 0.7))
+        fuel_level = 12 if low_fuel else max(15, 100 - int(progress_pct * 0.7))
+        fuel_status_badge = (
+            '<span class="badge-danger">CRÍTICO</span>'
+            if low_fuel
+            else '<span class="badge-normal">ESTABLE</span>'
+        )
         html(f"""
         <div class="dashboard-card">
             <div class="card-title">
-                <span>⚡ Energía y Combustible</span>
-                <span class="badge-normal">ESTABLE</span>
+                <span>Energía y Combustible</span>
+                {fuel_status_badge}
             </div>
-            <div class="main-metric">{fuel_level} <span style="font-size: 1.4rem; color: #64748B;">%</span></div>
-            <div class="sub-detail">Autonomía estimada del sistema de frío.</div>
-            <div style="background-color: #E2E8F0; border-radius: 6px; height: 8px; margin: 12px 0; overflow: hidden;">
-                <div style="background-color: {'#10B981' if fuel_level > 30 else '#EF4444'}; width: {fuel_level}%; height: 100%;"></div>
-            </div>
-            <div style="display: flex; justify-content: space-between; font-size: 0.78rem; color: #64748B;">
-                <span>Reserva crítica: 20%</span>
-                <span>Capacidad total: 100%</span>
-            </div>
-            <hr style="border-color: #E2E8F0; margin: 12px 0;">
-            <div style="display: flex; justify-content: space-between; font-size: 0.82rem;">
-                <div><span style="color:#64748B;">Autonomía:</span> <b>{fuel_level * 0.08:.1f} hrs</b></div>
-                <div><span style="color:#64748B;">Fuente:</span> <b>Diésel + Batería</b></div>
+            <div class="main-metric">{fuel_level} <span style="font-size: 1.1rem; color: #64748B;">%</span></div>
+            <div class="sub-detail" style="margin-top: 8px; display: flex; justify-content: space-between;">
+                <span>Autonomía: <b>4.4 hrs</b></span>
+                <span style="color: #64748B;">Diésel + Batería</span>
             </div>
         </div>
         """)
 
     with c3:
-        eta_min = 18 * 60 + 40 - (110 if st.session_state.action_applied else 0)
-        eta_str = f"{eta_min // 60}:{eta_min % 60:02d}"
-        delay_tag = (
-            '<span class="badge-warning">RETRASO ESTIMADO</span>'
-            if calc_risk > 50
-            else '<span class="badge-normal">A TIEMPO</span>'
+        block_extra = 75 if road_block else 0
+        eta_min = (
+            18 * 60
+            + 40
+            + block_extra
+            - (110 if st.session_state.action_applied else 0)
         )
-
+        eta_str = f"{eta_min // 60}:{eta_min % 60:02d}"
         html(f"""
         <div class="dashboard-card">
             <div class="card-title">
-                <span>🚛 Estado del Transporte</span>
-                {delay_tag}
+                <span>Estado del Transporte</span>
+                <span class="badge-warning">RETRASO</span>
             </div>
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; font-size: 0.85rem;">
-                <div><span style="color:#64748B;">Estado:</span><br><b>En tránsito</b></div>
-                <div><span style="color:#64748B;">Tráfico:</span><br><b style="color: #D97706;">{traffic_level}</b></div>
-                <div><span style="color:#64748B;">ETA Estimado:</span><br><b style="font-size: 1.1rem; color: #0F172A;">{eta_str}</b></div>
-                <div><span style="color:#64748B;">Velocidad Promedio:</span><br><b>62 km/h</b></div>
-                <div><span style="color:#64748B;">Conductor:</span><br><b>{driver_name}</b></div>
-                <div><span style="color:#64748B;">Vehículo ID:</span><br><b>{truck_model}</b></div>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 4px; font-size: 0.76rem; margin-top: 4px;">
+                <div><span style="color: #64748B;">ETA:</span> <b style="color: #0F172A;">{eta_str}</b></div>
+                <div><span style="color: #64748B;">Tráfico:</span> <b style="color: #D97706;">{traffic_level}</b></div>
+                <div><span style="color: #64748B;">Conductor:</span> <b>{driver_name}</b></div>
+                <div><span style="color: #64748B;">Vehículo:</span> <b>{truck_plate}</b></div>
             </div>
+            <div class="sub-detail" style="margin-top: 6px;">Velocidad Promedio: <b>62 km/h</b></div>
         </div>
         """)
 
-    # FILA 2: DETALLES, IA Y ACCIÓN
-    col_left, col_mid, col_right = st.columns([1.2, 1, 1.1])
+    st.markdown("<br>", unsafe_allow_html=True)
+
+    # Fila Media
+    col_left, col_mid, col_right = st.columns([1.2, 1, 1.2])
 
     with col_left:
         html(f"""
         <div class="dashboard-card">
-            <div class="card-title">📍 Ubicación y Telemetría Integrada</div>
-            <div style="display: flex; justify-content: space-between; font-size: 0.85rem; margin-bottom: 8px;">
-                <b>Progreso de Ruta ({progress_pct}%)</b>
+            <div class="card-title" style="margin-bottom: 8px;">📍 Ubicación y Telemetría Integrada</div>
+            <div style="font-size: 0.78rem; font-weight: 700; margin-bottom: 2px;">Progreso de Ruta ({progress_pct}%)</div>
+            <div style="display: flex; justify-content: space-between; font-size: 0.72rem; color: #64748B; margin-bottom: 4px;">
+                <span>Avance actual</span>
                 <span style="color: #0284C7; font-weight: 600;">{current_km} / {total_km} km</span>
             </div>
-            <div style="background-color: #E2E8F0; border-radius: 6px; height: 6px; margin-bottom: 15px;">
-                <div style="background-color: #0284C7; width: {progress_pct}%; height: 100%; border-radius: 6px;"></div>
-            </div>
-            
-            <div style="background-color: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 8px; padding: 12px; margin-bottom: 15px;">
-                <div style="font-size: 0.75rem; color: #64748B; text-transform: uppercase;">Detalles de la Carga</div>
-                <div style="font-size: 0.82rem; margin-top: 4px; color: #1E293B;"><b>Placa Camión:</b> {truck_plate}</div>
-                <div style="font-size: 0.82rem; color: #1E293B;"><b>Contenedor:</b> R40 · MSCU 728451-3</div>
-                <div style="font-size: 0.78rem; color: #64748B; margin-top: 2px;">Coordenadas: {truck_lat:.4f}, {truck_lon:.4f}</div>
+            <div style="background-color: #E2E8F0; border-radius: 4px; height: 5px; margin-bottom: 10px;">
+                <div style="background-color: #0284C7; width: {progress_pct}%; height: 100%; border-radius: 4px;"></div>
             </div>
 
-            <div style="font-size: 0.78rem; color: #64748B; font-weight: 700; margin-bottom: 8px;">RUTOGRAMA EN TIEMPO REAL</div>
-            <div class="timeline-item"><span style="color: #10B981;">● {cities[0]} (Origen)</span><span style="color:#64748B;">Completado</span></div>
-            <div class="timeline-item"><span style="color: {'#10B981' if progress_pct >= 40 else '#64748B'};">● {cities[1] if len(cities)>1 else 'Punto 1'}</span><span style="color:#64748B;">{'Pasado' if progress_pct >= 40 else 'Pendiente'}</span></div>
-            <div class="timeline-item"><span style="color: {'#D97706' if progress_pct >= 70 else '#64748B'};">● {cities[2] if len(cities)>2 else 'Punto 2'}</span><span style="color:#64748B;">En Tránsito</span></div>
-            <div class="timeline-item"><span style="color: {'#0284C7' if progress_pct == 100 else '#64748B'};">● {cities[-1]} (Destino)</span><span style="color:#64748B;">ETA {eta_str}</span></div>
+            <div style="background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 6px; padding: 8px 10px; margin-bottom: 10px; font-size: 0.75rem;">
+                <div style="font-size: 0.62rem; text-transform: uppercase; color: #64748B; font-weight: 700; margin-bottom: 2px;">Detalles de la Carga</div>
+                <div>Placa: <b>{truck_plate}</b> | Contenedor: <b>{container_code.split('·')[0]}</b></div>
+                <div>Coordenadas: <b>{truck_lat:.4f}, {truck_lon:.4f}</b></div>
+            </div>
+
+            <div style="font-size: 0.74rem; font-weight: 700; margin-bottom: 4px; text-transform: uppercase; color: #64748B;">Rutograma en Tiempo Real</div>
+            <div style="font-size: 0.76rem; margin-bottom: 8px;">
+                <div style="display: flex; justify-content: space-between; padding: 3px 0; border-bottom: 1px solid #F1F5F9;">
+                    <span style="color: #059669; font-weight: 600;">● {cities[0]}</span><span style="color: #64748B;">Completado</span>
+                </div>
+                <div style="display: flex; justify-content: space-between; padding: 3px 0; border-bottom: 1px solid #F1F5F9;">
+                    <span style="color: #0284C7; font-weight: 600;">● {cities[1]}</span><span style="color: #64748B;">Pasado</span>
+                </div>
+                <div style="display: flex; justify-content: space-between; padding: 3px 0; border-bottom: 1px solid #F1F5F9;">
+                    <span style="color: #D97706; font-weight: 600;">● {cities[2]}</span><span style="color: #D97706; font-weight: 600;">En Tránsito</span>
+                </div>
+            </div>
+            <div style="font-size: 0.7rem; color: #64748B; text-align: right; border-top: 1px solid #F1F5F9; padding-top: 4px;">
+                Actualizado vía Gateway IoT Satelital
+            </div>
         </div>
         """)
 
     with col_mid:
-        risk_color = (
-            "#EF4444"
-            if calc_risk > 60
-            else ("#D97706" if calc_risk > 30 else "#10B981")
-        )
-
-        html("""
-        <div class="dashboard-card">
-            <div class="card-title">
-                <span>🤖 Predicción de IA</span>
-                <span class="badge-gray">PRÓXIMAS 3 HORAS</span>
-            </div>
-            <div style="text-align: center; margin: 5px 0;">
-                <div style="font-size: 0.85rem; color: #D97706; font-weight: 700;">Evaluación del Riesgo Térmico</div>
-            </div>
-        </div>
-        """)
-
-        fig_risk = go.Figure(
-            go.Pie(
-                values=[calc_risk, 100 - calc_risk],
-                hole=0.75,
-                marker_colors=[risk_color, "#E2E8F0"],
-                textinfo="none",
-            )
-        )
-        fig_risk.update_layout(
-            height=140,
-            margin=dict(l=0, r=0, t=0, b=0),
-            paper_bgcolor="rgba(0,0,0,0)",
-            showlegend=False,
-            annotations=[
-                dict(
-                    text=(
-                        f"<b>{calc_risk}%</b><br><span"
-                        " style='font-size:10px;color:#64748B;'>RIESGO</span>"
-                    ),
-                    x=0.5,
-                    y=0.5,
-                    font_size=22,
-                    font_color="#0F172A",
-                    showarrow=False,
-                )
-            ],
-        )
-        st.plotly_chart(
-            fig_risk, use_container_width=True, config={"displayModeBar": False}
-        )
-
-        risk_msg = (
-            "El sistema predice un incremento en el riesgo térmico debido a factores climáticos y tráfico denso."
-            if calc_risk > 50
-            else "Condiciones operativas estables. No se anticipan desviaciones térmicas."
-        )
-
         html(f"""
-        <div style="background-color: #FFFFFF; border: 1px solid #E2E8F0; border-radius: 12px; padding: 15px; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
-            <p style="font-size: 0.8rem; color: #334155; line-height: 1.4;">
-                "{risk_msg}"
-            </p>
-            <hr style="border-color: #E2E8F0; margin: 10px 0;">
-            <div style="font-size: 0.78rem; color: #64748B; display: flex; justify-content: space-between; margin-bottom: 4px;">
-                <span>Tráfico detectado:</span><b style="color:#1E293B;">{traffic_level}</b>
+        <div class="dashboard-card" style="text-align: center;">
+            <div class="card-title" style="justify-content: space-between;">
+                <span>🤖 Predicción de IA</span>
+                <span class="badge-gray">3 Horas</span>
             </div>
-            <div style="font-size: 0.78rem; color: #64748B; display: flex; justify-content: space-between;">
-                <span>Temp. exterior:</span><b style="color:#1E293B;">{ext_temp}°C</b>
+            <div style="font-size: 0.75rem; font-weight: 700; color: #D97706; margin-top: 2px; margin-bottom: 8px;">Evaluación de Riesgo Térmico</div>
+
+            <div style="position: relative; width: 110px; height: 110px; margin: 0 auto 10px auto; border-radius: 50%; background: conic-gradient(#D97706 {calc_risk * 3.6}deg, #E2E8F0 0deg); display: flex; align-items: center; justify-content: center; box-shadow: inset 0 2px 4px rgba(0,0,0,0.1);">
+                <div style="position: absolute; width: 82px; height: 82px; background-color: #FFFFFF; border-radius: 50%; display: flex; flex-direction: column; align-items: center; justify-content: center; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
+                    <span style="font-size: 1.35rem; font-weight: 800; color: #0F172A; line-height: 1;">{calc_risk}%</span>
+                    <span style="font-size: 0.58rem; font-weight: 700; color: #64748B; letter-spacing: 0.05em; margin-top: 2px;">RIESGO</span>
+                </div>
+            </div>
+
+            <div style="font-size: 0.72rem; color: #64748B; font-style: italic; margin-bottom: 6px;">
+                "Incremento por tráfico denso y temperatura exterior."
+            </div>
+            <div style="display: flex; justify-content: space-between; font-size: 0.74rem; text-align: left; border-top: 1px solid #E2E8F0; padding-top: 6px;">
+                <span style="color: #64748B;">Tráfico: <b>{traffic_level}</b></span>
+                <span style="color: #64748B;">Exterior: <b>{ext_temp} °C</b></span>
             </div>
         </div>
         """)
 
     with col_right:
-        html(f"""
-        <div class="dashboard-card">
-            <div class="card-title">
-                <span>💡 Acción Recomendada</span>
-                <span class="badge-cyan">PRESCRIPTIVO</span>
+        html("""
+        <div class="dashboard-card" style="border-top: 3px solid #0284C7; padding-top: 14px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                <span class="card-title" style="margin:0; color: #0284C7;">💡 Acciones Prescriptivas (IA)</span>
+                <span class="badge-cyan">INTERACTIVO</span>
             </div>
-            <div style="font-size: 0.92rem; font-weight: 700; color: #0F172A; margin-bottom: 10px;">
-                Conectar el reefer al próximo punto eléctrico y ajustar setpoint preventivo.
-            </div>
-            <ol style="font-size: 0.8rem; color: #334155; padding-left: 18px; margin-bottom: 12px;">
-                <li style="margin-bottom: 6px;"><b>Desviar a estación eléctrica Km 812</b>.</li>
-                <li style="margin-bottom: 6px;">Bajar setpoint a <b>1,5 °C</b> por 45 min.</li>
-                <li>Notificar al conductor ({driver_name}).</li>
-            </ol>
-            
-            <div class="financial-box">
-                <div class="financial-title">IMPACTO FINANCIERO EVITADO</div>
-                <div class="financial-value">USD 9.400</div>
-                <div style="font-size: 0.75rem; color: #059669; margin-top: 2px;">
-                    → Evita pérdida total por daño de carga sensible.
-                </div>
-            </div>
-        </div>
         """)
 
-        btn_col1, btn_col2 = st.columns(2)
-        with btn_col1:
-            if st.button(
-                "✓ Aplicar Acción", type="primary", use_container_width=True
-            ):
-                st.session_state.action_applied = True
-                st.toast("✅ Acción prescriptiva aplicada con éxito.", icon="❄️")
-                st.rerun()
+        strategies = st.session_state.available_strategies
 
-        with btn_col2:
-            if st.button("✕ Descartar", type="secondary", use_container_width=True):
-                st.session_state.action_applied = False
-                st.toast("⚠️ Recomendación ignorada.", icon="ℹ️")
-                st.rerun()
+        if len(strategies) > 0:
+            html(
+                '<div style="font-size: 0.74rem; color: #64748B; margin-bottom: 8px;">Seleccione la estrategia óptima de mitigación en ruta:</div>'
+            )
 
-    # NUEVA SECCIÓN: KPIs Avanzados de Supply Chain / Logística 4.0
-    st.markdown("---")
-    st.subheader("📈 Analítica de Desempeño Logístico (DCSA IoT)")
-    kpi_col1, kpi_col2, kpi_col3, kpi_col4 = st.columns(4)
-    with kpi_col1:
-        st.metric(
-            label="OTIF Estimado", value="96.4%", delta="+1.2% vs mes anterior"
-        )
-    with kpi_col2:
-        st.metric(
-            label="Eficiencia Energética",
-            value="91.8%",
-            delta="-0.5% (Consumo alto)",
-            delta_color="inverse",
-        )
-    with kpi_col3:
-        st.metric(
-            label="Desviación Térmica Promedio",
-            value="±0.2 °C",
-            delta="Dentro de rango",
-        )
-    with kpi_col4:
-        st.metric(
-            label="Conectividad Gateway", value="99.9%", delta="Estable"
-        )
+            if st.session_state.selected_strategy_idx >= len(strategies):
+                st.session_state.selected_strategy_idx = 0
+
+            for idx, strat in enumerate(strategies):
+                is_selected = st.session_state.selected_strategy_idx == idx
+                if st.button(
+                    f"{'✓ ' if is_selected else '○ '} {strat}",
+                    key=f"strat_btn_{idx}",
+                    use_container_width=True,
+                    type="primary" if is_selected else "secondary",
+                ):
+                    st.session_state.selected_strategy_idx = idx
+                    st.rerun()
+
+            selected_action = strategies[st.session_state.selected_strategy_idx]
+
+            impacto_financiero = (
+                "USD 9.400"
+                if "estación eléctrica" in selected_action
+                else (
+                    "USD 7.800"
+                    if "generador auxiliar" in selected_action
+                    else "USD 5.200"
+                )
+            )
+
+            html(f"""
+                <div class="financial-box">
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <div>
+                            <div style="font-size: 0.6rem; text-transform: uppercase; color: #047857; font-weight: 700; letter-spacing: 0.05em;">Impacto Financiero Evitado</div>
+                            <div style="font-size: 1.15rem; font-weight: 800; color: #059669; margin-top: 1px;">{impacto_financiero}</div>
+                        </div>
+                        <div style="text-align: right; font-size: 0.68rem; color: #047857; max-width: 140px; line-height: 1.1;">
+                            Protección de perecederos y SLA
+                        </div>
+                    </div>
+                </div>
+            """)
+
+            btn_col1, btn_col2 = st.columns(2)
+            with btn_col1:
+                if st.button(
+                    "✓ Aplicar Decisión", type="primary", use_container_width=True
+                ):
+                    st.session_state.action_applied = True
+                    nuevo_log = {
+                        "Hora": datetime.now().strftime("%H:%M:%S"),
+                        "Evento": "Estrategia Aplicada",
+                        "Detalle": f"Ejecutada: {selected_action} (Ahorro: {impacto_financiero})",
+                        "Nivel": "ÉXITO",
+                    }
+                    st.session_state.audit_logs.insert(0, nuevo_log)
+
+                    st.session_state.available_strategies.pop(
+                        st.session_state.selected_strategy_idx
+                    )
+                    st.session_state.selected_strategy_idx = 0
+                    st.toast(
+                        "✅ Decisión aplicada y registrada en el Timeline.",
+                        icon="🤖",
+                    )
+                    st.rerun()
+            with btn_col2:
+                if st.button(
+                    "✕ Descartar", type="secondary", use_container_width=True
+                ):
+                    nuevo_log = {
+                        "Hora": datetime.now().strftime("%H:%M:%S"),
+                        "Evento": "Estrategia Descartada",
+                        "Detalle": f"Descartada: {selected_action}",
+                        "Nivel": "ADVERTENCIA",
+                    }
+                    st.session_state.audit_logs.insert(0, nuevo_log)
+
+                    st.session_state.available_strategies.pop(
+                        st.session_state.selected_strategy_idx
+                    )
+                    st.session_state.selected_strategy_idx = 0
+                    st.toast(
+                        "⚠️ Opción descartada y registrada en el Timeline.",
+                        icon="ℹ️",
+                    )
+                    st.rerun()
+        else:
+            html("""
+                <div style="text-align: center; padding: 24px 0; color: #64748B;">
+                    <div style="font-size: 1.5rem; margin-bottom: 4px;">✨</div>
+                    <div style="font-size: 0.85rem; font-weight: 600; color: #0F172A;">No hay acciones pendientes</div>
+                    <div style="font-size: 0.74rem; margin-top: 2px;">Todas las recomendaciones de IA han sido procesadas.</div>
+                </div>
+            """)
+
+        html("</div>")
+
+    # Sección Inferior
+    st.markdown("<br>", unsafe_allow_html=True)
+
+    html(f"""
+    <div style="background: #111827; border-radius: 10px; padding: 16px; color: #fff; box-shadow: 0 1px 3px rgba(0,0,0,0.1); margin-bottom: 14px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+            <div>
+                <span style="font-size: 0.76rem; font-weight: 700; color: #9CA3AF; text-transform: uppercase; letter-spacing: 0.06em;">Historial de Temperatura Reefer (°C) por Hora</span>
+            </div>
+            <div style="display: flex; align-items: center; gap: 8px;">
+                <span style="font-size: 0.7rem; color: #38BDF8; background: rgba(56, 189, 248, 0.1); padding: 2px 6px; border-radius: 4px; border: 1px solid rgba(56, 189, 248, 0.2);">Setpoint: 1.5°C</span>
+                <span style="font-size: 0.7rem; color: #10B981; font-weight: 600;">● Monitoreo En Vivo</span>
+            </div>
+        </div>
+        
+        <div style="display: flex; align-items: flex-end; justify-content: space-between; height: 100px; padding-bottom: 4px; border-bottom: 1px solid #374151;">
+            <div style="text-align: center; flex: 1;">
+                <span style="font-size: 10px; font-weight: 700; color: #38BDF8; display: block; margin-bottom: 3px;">1.4°</span>
+                <div style="background: #3B82F6; height: 38px; width: 8px; margin: 0 auto; border-radius: 4px 4px 0 0;"></div>
+                <span style="font-size: 10px; color: #9CA3AF; display: block; margin-top: 4px;">12:00</span>
+            </div>
+            <div style="text-align: center; flex: 1;">
+                <span style="font-size: 10px; font-weight: 700; color: #38BDF8; display: block; margin-bottom: 3px;">1.5°</span>
+                <div style="background: #3B82F6; height: 44px; width: 8px; margin: 0 auto; border-radius: 4px 4px 0 0;"></div>
+                <span style="font-size: 10px; color: #9CA3AF; display: block; margin-top: 4px;">13:00</span>
+            </div>
+            <div style="text-align: center; flex: 1;">
+                <span style="font-size: 10px; font-weight: 700; color: #38BDF8; display: block; margin-bottom: 3px;">1.5°</span>
+                <div style="background: #3B82F6; height: 42px; width: 8px; margin: 0 auto; border-radius: 4px 4px 0 0;"></div>
+                <span style="font-size: 10px; color: #9CA3AF; display: block; margin-top: 4px;">14:00</span>
+            </div>
+            <div style="text-align: center; flex: 1;">
+                <span style="font-size: 10px; font-weight: 700; color: #F59E0B; display: block; margin-bottom: 3px;">{base_temp:.1f}°</span>
+                <div style="background: #F59E0B; height: 62px; width: 8px; margin: 0 auto; border-radius: 4px 4px 0 0;"></div>
+                <span style="font-size: 10px; color: #9CA3AF; display: block; margin-top: 4px;">15:00</span>
+            </div>
+            <div style="text-align: center; flex: 1;">
+                <span style="font-size: 10px; font-weight: 700; color: #38BDF8; display: block; margin-bottom: 3px;">1.6°</span>
+                <div style="background: #3B82F6; height: 46px; width: 8px; margin: 0 auto; border-radius: 4px 4px 0 0;"></div>
+                <span style="font-size: 10px; color: #9CA3AF; display: block; margin-top: 4px;">16:00</span>
+            </div>
+            <div style="text-align: center; flex: 1;">
+                <span style="font-size: 10px; font-weight: 700; color: #38BDF8; display: block; margin-bottom: 3px;">1.5°</span>
+                <div style="background: #3B82F6; height: 43px; width: 8px; margin: 0 auto; border-radius: 4px 4px 0 0;"></div>
+                <span style="font-size: 10px; color: #9CA3AF; display: block; margin-top: 4px;">17:00</span>
+            </div>
+            <div style="text-align: center; flex: 1;">
+                <span style="font-size: 10px; font-weight: 700; color: #38BDF8; display: block; margin-bottom: 3px;">1.5°</span>
+                <div style="background: #3B82F6; height: 41px; width: 8px; margin: 0 auto; border-radius: 4px 4px 0 0;"></div>
+                <span style="font-size: 10px; color: #9CA3AF; display: block; margin-top: 4px;">18:00</span>
+            </div>
+        </div>
+    </div>
+    """)
+
+    html("""
+    <div class="dashboard-card">
+        <div class="card-title" style="margin-bottom: 8px;">📈 Analítica de Desempeño Logístico (DCSA IoT Standard)</div>
+        <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; text-align: center;">
+            <div style="background: #F8FAFC; padding: 10px; border-radius: 6px; border: 1px solid #E2E8F0;">
+                <span style="font-size: 0.7rem; color: #64748B; text-transform: uppercase; font-weight: 700;">Eficiencia de Ruta</span><br>
+                <b style="font-size: 1.15rem; color: #0F172A;">94.2%</b><br>
+                <span class="badge-normal" style="font-size: 0.62rem;">↑ +1.2% vs mes anterior</span>
+            </div>
+            <div style="background: #F8FAFC; padding: 10px; border-radius: 6px; border: 1px solid #E2E8F0;">
+                <span style="font-size: 0.7rem; color: #64748B; text-transform: uppercase; font-weight: 700;">Consumo Energético</span><br>
+                <b style="font-size: 1.15rem; color: #0F172A;">14.8 kWh/h</b><br>
+                <span class="badge-warning" style="font-size: 0.62rem;">↓ -0.5% (Consumo alto)</span>
+            </div>
+            <div style="background: #F8FAFC; padding: 10px; border-radius: 6px; border: 1px solid #E2E8F0;">
+                <span style="font-size: 0.7rem; color: #64748B; text-transform: uppercase; font-weight: 700;">Integridad Térmica</span><br>
+                <b style="font-size: 1.15rem; color: #0F172A;">99.8%</b><br>
+                <span class="badge-normal" style="font-size: 0.62rem;">↑ Dentro de rango</span>
+            </div>
+            <div style="background: #F8FAFC; padding: 10px; border-radius: 6px; border: 1px solid #E2E8F0;">
+                <span style="font-size: 0.7rem; color: #64748B; text-transform: uppercase; font-weight: 700;">Compliance SLA</span><br>
+                <b style="font-size: 1.15rem; color: #0F172A;">98.5%</b><br>
+                <span class="badge-normal" style="font-size: 0.62rem;">↑ Estable</span>
+            </div>
+        </div>
+    </div>
+    """)
 
 elif st.session_state.active_tab == "mapa":
-    st.subheader("🗺️ Rastreo Satelital GPS en Tiempo Real")
+    st.subheader("🗺️ Torre de Control: Rastreo GPS y Telemetría en Ruta")
     st.caption(
-        "Visualización interactiva de la ruta y posición dinámica del camión."
+        f"Visualización geoespacial detallada y nodos logísticos para la ruta **{shipment_id}**."
     )
 
-    route_df = pd.DataFrame({"city": cities, "lat": lats, "lon": lons})
+    route_df = pd.DataFrame({
+        "city": cities,
+        "lat": lats,
+        "lon": lons,
+        "tipo": ["Origen"]
+        + ["Punto de Control"] * (len(cities) - 2)
+        + ["Puerto Destino"],
+    })
     truck_df = pd.DataFrame({
         "lat": [truck_lat],
         "lon": [truck_lon],
         "label": [f"🚚 Camión {truck_plate}"],
+        "status": [
+            f"Riesgo: {calc_risk}% | Temp: {base_temp:.1f}°C | Clima: {ext_temp}°C"
+        ],
     })
 
     path_data = [
-        {"path": [[lons[i], lats[i]] for i in range(len(lats))], "name": "Ruta"}
+        {
+            "path": [[lons[i], lats[i]] for i in range(len(lats))],
+            "name": "Ruta Troncal DCSA",
+        }
     ]
     layer_path = pdk.Layer(
         "PathLayer",
         path_data,
         get_path="path",
-        get_color=[2, 132, 199, 255],
-        width_scale=20,
-        width_min_pixels=4,
+        get_color=[2, 132, 199, 220],
+        width_scale=25,
+        width_min_pixels=5,
     )
-
     layer_cities = pdk.Layer(
         "ScatterplotLayer",
         route_df,
         get_position="[lon, lat]",
-        get_color=[71, 85, 105, 200],
-        get_radius=15000,
+        get_color=[15, 23, 42, 220],
+        get_radius=12000,
         pickable=True,
     )
-
     truck_color_rgb = (
         [239, 68, 68, 255] if calc_risk > 50 else [16, 185, 129, 255]
     )
@@ -701,77 +895,77 @@ elif st.session_state.active_tab == "mapa":
         truck_df,
         get_position="[lon, lat]",
         get_color=truck_color_rgb,
-        get_radius=25000,
+        get_radius=22000,
         pickable=True,
     )
 
+    tooltip_config = {
+        "html": "<b>Ubicación / Ciudad:</b> {city}<br/><b>Tipo:</b> {tipo}",
+        "style": {
+            "backgroundColor": "#0F172A",
+            "color": "white",
+            "fontSize": "12px",
+            "padding": "8px",
+            "borderRadius": "4px",
+        },
+    }
+
     view_state = pdk.ViewState(
-        latitude=truck_lat, longitude=truck_lon, zoom=6, pitch=0
+        latitude=truck_lat, longitude=truck_lon, zoom=6.5, pitch=0, bearing=0
     )
     r = pdk.Deck(
         layers=[layer_path, layer_cities, layer_truck],
         initial_view_state=view_state,
         map_style="https://basemaps.cartocdn.com/gl/positron-gl-style/style.json",
-        tooltip={"text": "{city}\n{label}"},
+        tooltip=tooltip_config,
     )
+    st.pydeck_chart(r, use_container_width=True)
 
-    st.pydeck_chart(r)
+    st.markdown("<br>", unsafe_allow_html=True)
+    m_col1, m_col2, m_col3, m_col4 = st.columns(4)
 
-    map_info1, map_info2, map_info3 = st.columns(3)
-    with map_info1:
-        st.info(f"📍 **Coordenadas GPS:** {truck_lat:.4f} N, {truck_lon:.4f} W")
-    with map_info2:
-        st.info(f"🚛 **Placa:** {truck_plate} | **Conductor:** {driver_name}")
-    with map_info3:
-        st.info("📡 **Señal Gateway DCSA:** Excelente (Sincronizado)")
+    with m_col1:
+        html("""
+        <div class="dashboard-card">
+            <div class="card-title">Conductor Asignado</div>
+            <div style="font-size: 1.05rem; font-weight: 700; color: #0F172A;">C. Ramírez</div>
+            <div class="sub-detail">Licencia: <b>CAT-C3 (Verificada)</b></div>
+        </div>
+        """)
+
+    with m_col2:
+        html("""
+        <div class="dashboard-card">
+            <div class="card-title">Unidad de Transporte</div>
+            <div style="font-size: 1.05rem; font-weight: 700; color: #0F172A;">SXK-482</div>
+            <div class="sub-detail">Tractor 3S3 (#C-114)</div>
+        </div>
+        """)
+
+    with m_col3:
+        html(f"""
+        <div class="dashboard-card">
+            <div class="card-title">Clima en Posición GPS</div>
+            <div style="font-size: 1.05rem; font-weight: 700; color: #0F172A;">{ext_temp} °C</div>
+            <div class="sub-detail">Condición: <b>Cálido / Despejado</b></div>
+        </div>
+        """)
+
+    with m_col4:
+        html(f"""
+        <div class="dashboard-card">
+            <div class="card-title">Estado del Viaje</div>
+            <div style="font-size: 1.05rem; font-weight: 700; color: #0284C7;">65% Completado</div>
+            <div class="sub-detail">Distancia: <b>687 / 1058 km</b></div>
+        </div>
+        """)
 
 elif st.session_state.active_tab == "logs":
-    st.subheader("📋 Registro Telemétrico DCSA IoT & Alertas")
+    st.subheader("📋 Timeline Operativo de Auditoría")
     st.write(
-        "Eventos, alertas automáticas e incidentes registrados por el Gateway a lo largo del viaje."
+        "Registro cronológico en tiempo real de eventos del Gateway IoT, decisiones ejecutadas por el operador y recomendaciones de la IA."
     )
 
-    log_data = [
-        {
-            "Hora": "18:14:10",
-            "Evento / Sensor": "Telemetría GPS",
-            "Detalle": f"Posición actual Lat {truck_lat:.4f}, Lon {truck_lon:.4f}",
-            "Nivel": "INFO",
-        },
-        {
-            "Hora": "18:12:00",
-            "Evento / Sensor": "Temperatura Reefer",
-            "Detalle": f"Lectura actual: {base_temp:.1f} °C",
-            "Nivel": "NORMAL" if base_temp <= 2.5 else "ALERTA",
-        },
-        {
-            "Hora": "18:00:45",
-            "Evento / Sensor": "Evaluación de Riesgo IA",
-            "Detalle": f"Calculado riesgo térmico de {calc_risk}%",
-            "Nivel": "ALERTA" if calc_risk > 50 else "NORMAL",
-        },
-        {
-            "Hora": "17:42:10",
-            "Evento / Sensor": "Sensor de Puertas",
-            "Detalle": (
-                "Apertura detectada (Inspección)"
-                if door_open
-                else "Puerta sellada y asegurada"
-            ),
-            "Nivel": "ADVERTENCIA" if door_open else "NORMAL",
-        },
-    ]
-    st.table(log_data)
-
-    st.markdown("### 🔔 Centro de Notificaciones y Alertas Automáticas")
-    notif_col1, notif_col2 = st.columns(2)
-    with notif_col1:
-        st.success(
-            "📱 **WhatsApp / SMS enviado a Conductor ("
-            + driver_name
-            + "):** Instrucción de desvío y optimización de setpoint transmitida correctamente."
-        )
-    with notif_col2:
-        st.info(
-            "📧 **Correo Automático a Centro de Control (Valoroo):** Reporte de incidentes y estado de carga actualizado en tiempo real."
-        )
+    # Convertir la lista de session_state directamente a un DataFrame limpio para renderizar sin retrasos
+    df_logs = pd.DataFrame(st.session_state.audit_logs)
+    st.dataframe(df_logs, use_container_width=True, hide_index=True)

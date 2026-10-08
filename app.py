@@ -31,7 +31,7 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-# 2. Estilos CSS limpios y profesionales
+# 2. Estilos CSS limpios y profesionales (incluyendo el ajuste para mantener el expander siempre blanco)
 html("""
 <style>
 .stApp {
@@ -79,9 +79,32 @@ div.stButton > button[kind="secondary"]:hover {
     background-color: #FFFFFF;
     border: 1px solid #E2E8F0;
     border-radius: 10px;
-    padding: 16px;
+    padding: 18px 20px;
     margin-bottom: 12px;
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+}
+
+/* --- FORZAR FONDO BLANCO Y DISEÑO LIMPIO EN EL EXPANDER --- */
+[data-testid="stExpander"] {
+    background-color: #FFFFFF !important;
+    border: 1px solid #E2E8F0 !important;
+    border-radius: 8px !important;
+    box-shadow: none !important;
+    margin-top: 10px !important;
+}
+[data-testid="stExpander"] summary {
+    background-color: #FFFFFF !important;
+    color: #0F172A !important;
+    font-weight: 600 !important;
+    border-radius: 8px !important;
+}
+[data-testid="stExpander"] summary:hover {
+    background-color: #F8FAFC !important;
+    color: #0284C7 !important;
+}
+[data-testid="stExpander"] div[role="region"] {
+    background-color: #FFFFFF !important;
+    border-top: 1px solid #F1F5F9 !important;
 }
 
 /* Badges corporativos */
@@ -106,21 +129,9 @@ div.stButton > button[kind="secondary"]:hover {
     border-radius: 4px; font-size: 0.72rem; font-weight: 600; border: 1px solid #E2E8F0;
 }
 
-.card-title {
-    font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.06em;
-    color: #64748B; font-weight: 700; display: flex; justify-content: space-between;
-    align-items: center; margin-bottom: 6px;
-}
-.main-metric {
-    font-size: 2rem; font-weight: 800; color: #0F172A; line-height: 1.1;
-}
-.sub-detail {
-    font-size: 0.76rem; color: #64748B; margin-top: 4px;
-}
-
 .financial-box {
     background: linear-gradient(135deg, rgba(16, 185, 129, 0.06) 0%, rgba(6, 182, 212, 0.06) 100%);
-    border: 1px solid rgba(16, 185, 129, 0.25); border-radius: 8px; padding: 10px 12px; margin-top: 10px; margin-bottom: 12px;
+    border: 1px solid rgba(16, 185, 129, 0.25); border-radius: 8px; padding: 10px 12px; margin-top: 8px; margin-bottom: 10px;
 }
 </style>
 """)
@@ -509,30 +520,124 @@ st.markdown(
 # CONTENIDO SEGÚN PESTAÑA
 # ---------------------------------------------------------
 if st.session_state.active_tab == "operativo":
-    # Fila Superior: 3 tarjetas con distribución simétrica
-    c1, c2, c3 = st.columns(3)
+    temp_status = (
+        "NORMAL"
+        if base_temp <= 2.5
+        else ("ADVERTENCIA" if base_temp <= 3.5 else "CRÍTICO")
+    )
+    badge_color = (
+        "badge-normal"
+        if temp_status == "NORMAL"
+        else ("badge-warning" if temp_status == "ADVERTENCIA" else "badge-danger")
+    )
+    hum_val = 84 if humidity_spike else 62
 
-    with c1:
-        temp_status = (
-            "NORMAL"
-            if base_temp <= 2.5
-            else ("ADVERTENCIA" if base_temp <= 3.5 else "CRÍTICO")
-        )
-        badge_color = (
-            "badge-normal"
-            if temp_status == "NORMAL"
-            else ("badge-warning" if temp_status == "ADVERTENCIA" else "badge-danger")
-        )
-        html(f"""
-        <div class="dashboard-card">
-            <div class="card-title">
-                <span>Temperatura Reefer</span>
-                <span class="{badge_color}">{temp_status}</span>
+    # --- TARJETA REEFER MAESTRA ROBUSTA Y BIEN DISTRIBUIDA ---
+    html(f"""
+    <div class="dashboard-card">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; border-bottom: 1px solid #F1F5F9; padding-bottom: 8px;">
+            <div style="display: flex; align-items: center; gap: 8px;">
+                <span style="font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.06em; color: #0F172A; font-weight: 800;">❄️ Temperatura Reefer (Contenedor Activo)</span>
+                <span class="badge-cyan">DCSA IoT</span>
             </div>
-            <div class="main-metric">{base_temp:.1f} <span style="font-size: 1.1rem; color: #64748B;">°C</span></div>
-            <div class="sub-detail" style="margin-top: 8px;">Setpoint: 1,5 °C | Límite Máx: 2,5 °C</div>
+            <span class="{badge_color}">{temp_status}</span>
         </div>
-        """)
+        
+        <div style="display: flex; align-items: center; justify-content: space-between; gap: 20px;">
+            <!-- Izquierda: Métrica Principal + Info de Estado -->
+            <div style="min-width: 160px; border-right: 1px solid #F1F5F9; padding-right: 15px;">
+                <div style="font-size: 0.68rem; color: #64748B; font-weight: 700; text-transform: uppercase;">Temperatura Actual</div>
+                <div style="font-size: 2.4rem; font-weight: 800; color: #0F172A; line-height: 1.1; margin: 2px 0;">{base_temp:.1f} <span style="font-size: 1.1rem; color: #64748B; font-weight: 600;">°C</span></div>
+                <div style="font-size: 0.72rem; color: #059669; font-weight: 600; display: flex; align-items: center; gap: 4px;">
+                    <span style="width: 7px; height: 7px; background: #10B981; border-radius: 50%; display: inline-block;"></span> Compresor Operativo
+                </div>
+            </div>
+
+            <!-- Centro: Mini Gráfica de Líneas NATIVA en SVG con más presencia -->
+            <div style="flex-grow: 1; text-align: center; background: #FAFAFA; border: 1px solid #E2E8F0; border-radius: 8px; padding: 10px 14px;">
+                <div style="display: flex; justify-content: space-between; font-size: 0.7rem; color: #64748B; margin-bottom: 4px; font-weight: 600;">
+                    <span>Tendencia Térmica (Últimas 7 Horas)</span>
+                    <span style="color: #0284C7;">Rango ideal: 1.0°C - 2.0°C</span>
+                </div>
+                <svg viewBox="0 0 380 42" style="width: 100%; height: 36px; display: block; overflow: visible;">
+                    <!-- Línea de tendencia -->
+                    <path d="M 10 28 L 65 25 L 120 27 L 175 10 L 230 22 L 285 19 L 340 30" fill="none" stroke="#0284C7" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+                    <!-- Puntos de datos -->
+                    <circle cx="10" cy="28" r="3" fill="#0284C7"/>
+                    <circle cx="65" cy="25" r="3" fill="#0284C7"/>
+                    <circle cx="120" cy="27" r="3" fill="#0284C7"/>
+                    <circle cx="175" cy="10" r="3.5" fill="#D97706"/>
+                    <circle cx="230" cy="22" r="3" fill="#0284C7"/>
+                    <circle cx="285" cy="19" r="3" fill="#0284C7"/>
+                    <circle cx="340" cy="30" r="3" fill="#0284C7"/>
+                </svg>
+                <div style="display: flex; justify-content: space-between; font-size: 9px; color: #94A3B8; font-weight: 600; margin-top: 4px; padding: 0 4px;">
+                    <span>12:00</span><span>13:00</span><span>14:00</span><span>15:00</span><span>16:00</span><span>17:00</span><span>18:00</span>
+                </div>
+            </div>
+
+            <!-- Derecha: Datos Técnicos y Setpoint -->
+            <div style="text-align: right; min-width: 140px; border-left: 1px solid #F1F5F9; padding-left: 15px; font-size: 0.78rem; color: #64748B; line-height: 1.5;">
+                Setpoint: <b style="color: #0F172A;">1,5°C</b><br>
+                Humedad: <b style="color: #0284C7;">{hum_val}%</b><br>
+                Alarma: <b style="color: #059669;">Ninguna</b>
+            </div>
+        </div>
+    </div>
+    """)
+
+    # --- EXPANDER CON ESTILO LIMPIO Y COLOR FIJO BLANCO ---
+    with st.expander(
+        "📋 Ver Historial Horario Detallado (Temperaturas y Horas Exactas)"
+    ):
+        st.markdown(
+            "<h5 style='margin:0 0 8px 0; color:#0F172A; font-size: 0.9rem;'>Registro Horario de Telemetría IoT</h5>",
+            unsafe_allow_html=True,
+        )
+        df_temp_history = pd.DataFrame({
+            "Hora": [
+                "12:00",
+                "13:00",
+                "14:00",
+                "15:00",
+                "16:00",
+                "17:00",
+                "18:00 (Actual)",
+            ],
+            "Temperatura (°C)": [
+                1.4,
+                1.5,
+                1.5,
+                f"{base_temp:.1f}",
+                1.6,
+                1.5,
+                f"{base_temp:.1f}",
+            ],
+            "Estado Térmico": [
+                "Normal",
+                "Normal",
+                "Normal",
+                "Alerta / Variación",
+                "Normal",
+                "Normal",
+                "En Monitoreo",
+            ],
+            "Humedad Relativa": [
+                "60%",
+                "61%",
+                "60%",
+                f"{hum_val}%",
+                "62%",
+                "61%",
+                f"{hum_val}%",
+            ],
+        })
+        st.dataframe(df_temp_history, use_container_width=True, hide_index=True)
+
+    st.markdown("<br>", unsafe_allow_html=True)
+
+    # Las demás tarjetas de Energía/Combustible y Estado del Transporte
+    c2, c3 = st.columns(2)
 
     with c2:
         fuel_level = 12 if low_fuel else max(15, 100 - int(progress_pct * 0.7))
@@ -541,16 +646,17 @@ if st.session_state.active_tab == "operativo":
             if low_fuel
             else '<span class="badge-normal">ESTABLE</span>'
         )
+        seal_txt = "Abierto (Alerta)" if door_open else "Bloqueado (e-Seal)"
         html(f"""
         <div class="dashboard-card">
-            <div class="card-title">
-                <span>Energía y Combustible</span>
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                <span style="font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.06em; color: #64748B; font-weight: 700;">Energía y Combustible</span>
                 {fuel_status_badge}
             </div>
-            <div class="main-metric">{fuel_level} <span style="font-size: 1.1rem; color: #64748B;">%</span></div>
-            <div class="sub-detail" style="margin-top: 8px; display: flex; justify-content: space-between;">
+            <div style="font-size: 2rem; font-weight: 800; color: #0F172A; line-height: 1.1;">{fuel_level} <span style="font-size: 1.1rem; color: #64748B;">%</span></div>
+            <div style="font-size: 0.76rem; color: #64748B; margin-top: 8px; display: flex; justify-content: space-between;">
                 <span>Autonomía: <b>4.4 hrs</b></span>
-                <span style="color: #64748B;">Diésel + Batería</span>
+                <span style="color: #059669; font-weight: 600;">{seal_txt}</span>
             </div>
         </div>
         """)
@@ -564,10 +670,15 @@ if st.session_state.active_tab == "operativo":
             - (110 if st.session_state.action_applied else 0)
         )
         eta_str = f"{eta_min // 60}:{eta_min % 60:02d}"
+        next_ckpt = (
+            "Estación Eléctrica Km 812"
+            if progress_pct > 50
+            else "Puerto Salgar (Check 1)"
+        )
         html(f"""
         <div class="dashboard-card">
-            <div class="card-title">
-                <span>Estado del Transporte</span>
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                <span style="font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.06em; color: #64748B; font-weight: 700;">Estado del Transporte</span>
                 <span class="badge-warning">RETRASO</span>
             </div>
             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 4px; font-size: 0.76rem; margin-top: 4px;">
@@ -576,48 +687,46 @@ if st.session_state.active_tab == "operativo":
                 <div><span style="color: #64748B;">Conductor:</span> <b>{driver_name}</b></div>
                 <div><span style="color: #64748B;">Vehículo:</span> <b>{truck_plate}</b></div>
             </div>
-            <div class="sub-detail" style="margin-top: 6px;">Velocidad Promedio: <b>62 km/h</b></div>
+            <div style="font-size: 0.76rem; color: #64748B; margin-top: 6px; border-top: 1px solid #F1F5F9; paddingTop: 4px;">
+                Check-point: <b style="color: #0284C7;">{next_ckpt}</b>
+            </div>
         </div>
         """)
 
     st.markdown("<br>", unsafe_allow_html=True)
 
-    # Fila Media
-    col_left, col_mid, col_right = st.columns([1.2, 1, 1.2])
+    # Fila Media: Distribución equilibrada 1:1:1
+    col_left, col_mid, col_right = st.columns(3)
 
     with col_left:
         html(f"""
         <div class="dashboard-card">
-            <div class="card-title" style="margin-bottom: 8px;">📍 Ubicación y Telemetría Integrada</div>
+            <div style="font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.06em; color: #64748B; font-weight: 700; margin-bottom: 8px;">📍 Ubicación y Telemetría</div>
             <div style="font-size: 0.78rem; font-weight: 700; margin-bottom: 2px;">Progreso de Ruta ({progress_pct}%)</div>
             <div style="display: flex; justify-content: space-between; font-size: 0.72rem; color: #64748B; margin-bottom: 4px;">
                 <span>Avance actual</span>
                 <span style="color: #0284C7; font-weight: 600;">{current_km} / {total_km} km</span>
             </div>
-            <div style="background-color: #E2E8F0; border-radius: 4px; height: 5px; margin-bottom: 10px;">
+            <div style="background-color: #E2E8F0; border-radius: 4px; height: 5px; margin-bottom: 8px;">
                 <div style="background-color: #0284C7; width: {progress_pct}%; height: 100%; border-radius: 4px;"></div>
             </div>
 
-            <div style="background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 6px; padding: 8px 10px; margin-bottom: 10px; font-size: 0.75rem;">
-                <div style="font-size: 0.62rem; text-transform: uppercase; color: #64748B; font-weight: 700; margin-bottom: 2px;">Detalles de la Carga</div>
+            <div style="background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 6px; padding: 6px 8px; margin-bottom: 8px; font-size: 0.73rem;">
                 <div>Placa: <b>{truck_plate}</b> | Contenedor: <b>{container_code.split('·')[0]}</b></div>
                 <div>Coordenadas: <b>{truck_lat:.4f}, {truck_lon:.4f}</b></div>
             </div>
 
-            <div style="font-size: 0.74rem; font-weight: 700; margin-bottom: 4px; text-transform: uppercase; color: #64748B;">Rutograma en Tiempo Real</div>
-            <div style="font-size: 0.76rem; margin-bottom: 8px;">
-                <div style="display: flex; justify-content: space-between; padding: 3px 0; border-bottom: 1px solid #F1F5F9;">
+            <div style="font-size: 0.72rem; font-weight: 700; margin-bottom: 3px; text-transform: uppercase; color: #64748B;">Rutograma en Vivo</div>
+            <div style="font-size: 0.74rem; margin-bottom: 6px;">
+                <div style="display: flex; justify-content: space-between; padding: 2px 0; border-bottom: 1px solid #F1F5F9;">
                     <span style="color: #059669; font-weight: 600;">● {cities[0]}</span><span style="color: #64748B;">Completado</span>
                 </div>
-                <div style="display: flex; justify-content: space-between; padding: 3px 0; border-bottom: 1px solid #F1F5F9;">
+                <div style="display: flex; justify-content: space-between; padding: 2px 0; border-bottom: 1px solid #F1F5F9;">
                     <span style="color: #0284C7; font-weight: 600;">● {cities[1]}</span><span style="color: #64748B;">Pasado</span>
                 </div>
-                <div style="display: flex; justify-content: space-between; padding: 3px 0; border-bottom: 1px solid #F1F5F9;">
+                <div style="display: flex; justify-content: space-between; padding: 2px 0;">
                     <span style="color: #D97706; font-weight: 600;">● {cities[2]}</span><span style="color: #D97706; font-weight: 600;">En Tránsito</span>
                 </div>
-            </div>
-            <div style="font-size: 0.7rem; color: #64748B; text-align: right; border-top: 1px solid #F1F5F9; padding-top: 4px;">
-                Actualizado vía Gateway IoT Satelital
             </div>
         </div>
         """)
@@ -625,23 +734,23 @@ if st.session_state.active_tab == "operativo":
     with col_mid:
         html(f"""
         <div class="dashboard-card" style="text-align: center;">
-            <div class="card-title" style="justify-content: space-between;">
-                <span>🤖 Predicción de IA</span>
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                <span style="font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.06em; color: #64748B; font-weight: 700;">🤖 Predicción de IA</span>
                 <span class="badge-gray">3 Horas</span>
             </div>
-            <div style="font-size: 0.75rem; font-weight: 700; color: #D97706; margin-top: 2px; margin-bottom: 8px;">Evaluación de Riesgo Térmico</div>
+            <div style="font-size: 0.74rem; font-weight: 700; color: #D97706; margin-top: 2px; margin-bottom: 6px;">Evaluación de Riesgo Térmico</div>
 
-            <div style="position: relative; width: 110px; height: 110px; margin: 0 auto 10px auto; border-radius: 50%; background: conic-gradient(#D97706 {calc_risk * 3.6}deg, #E2E8F0 0deg); display: flex; align-items: center; justify-content: center; box-shadow: inset 0 2px 4px rgba(0,0,0,0.1);">
-                <div style="position: absolute; width: 82px; height: 82px; background-color: #FFFFFF; border-radius: 50%; display: flex; flex-direction: column; align-items: center; justify-content: center; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
-                    <span style="font-size: 1.35rem; font-weight: 800; color: #0F172A; line-height: 1;">{calc_risk}%</span>
-                    <span style="font-size: 0.58rem; font-weight: 700; color: #64748B; letter-spacing: 0.05em; margin-top: 2px;">RIESGO</span>
+            <div style="position: relative; width: 96px; height: 96px; margin: 0 auto 8px auto; border-radius: 50%; background: conic-gradient(#D97706 {calc_risk * 3.6}deg, #E2E8F0 0deg); display: flex; align-items: center; justify-content: center; box-shadow: inset 0 2px 4px rgba(0,0,0,0.1);">
+                <div style="position: absolute; width: 72px; height: 72px; background-color: #FFFFFF; border-radius: 50%; display: flex; flex-direction: column; align-items: center; justify-content: center; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
+                    <span style="font-size: 1.2rem; font-weight: 800; color: #0F172A; line-height: 1;">{calc_risk}%</span>
+                    <span style="font-size: 0.52rem; font-weight: 700; color: #64748B; letter-spacing: 0.05em; margin-top: 2px;">RIESGO</span>
                 </div>
             </div>
 
-            <div style="font-size: 0.72rem; color: #64748B; font-style: italic; margin-bottom: 6px;">
+            <div style="font-size: 0.7rem; color: #64748B; font-style: italic; margin-bottom: 6px;">
                 "Incremento por tráfico denso y temperatura exterior."
             </div>
-            <div style="display: flex; justify-content: space-between; font-size: 0.74rem; text-align: left; border-top: 1px solid #E2E8F0; padding-top: 6px;">
+            <div style="display: flex; justify-content: space-between; font-size: 0.72rem; text-align: left; border-top: 1px solid #E2E8F0; padding-top: 6px;">
                 <span style="color: #64748B;">Tráfico: <b>{traffic_level}</b></span>
                 <span style="color: #64748B;">Exterior: <b>{ext_temp} °C</b></span>
             </div>
@@ -652,8 +761,8 @@ if st.session_state.active_tab == "operativo":
         html("""
         <div class="dashboard-card" style="border-top: 3px solid #0284C7; padding-top: 14px;">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
-                <span class="card-title" style="margin:0; color: #0284C7;">💡 Acciones Prescriptivas (IA)</span>
-                <span class="badge-cyan">INTERACTIVO</span>
+                <span style="font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.06em; color: #0284C7; font-weight: 700;">💡 Acciones Prescriptivas</span>
+                <span class="badge-cyan">IA ACTIVA</span>
             </div>
         """)
 
@@ -661,7 +770,7 @@ if st.session_state.active_tab == "operativo":
 
         if len(strategies) > 0:
             html(
-                '<div style="font-size: 0.74rem; color: #64748B; margin-bottom: 8px;">Seleccione la estrategia óptima de mitigación en ruta:</div>'
+                '<div style="font-size: 0.72rem; color: #64748B; margin-bottom: 6px;">Seleccione estrategia de mitigación:</div>'
             )
 
             if st.session_state.selected_strategy_idx >= len(strategies):
@@ -694,10 +803,10 @@ if st.session_state.active_tab == "operativo":
                 <div class="financial-box">
                     <div style="display: flex; justify-content: space-between; align-items: center;">
                         <div>
-                            <div style="font-size: 0.6rem; text-transform: uppercase; color: #047857; font-weight: 700; letter-spacing: 0.05em;">Impacto Financiero Evitado</div>
-                            <div style="font-size: 1.15rem; font-weight: 800; color: #059669; margin-top: 1px;">{impacto_financiero}</div>
+                            <div style="font-size: 0.58rem; text-transform: uppercase; color: #047857; font-weight: 700; letter-spacing: 0.05em;">Impacto Financiero Evitado</div>
+                            <div style="font-size: 1.05rem; font-weight: 800; color: #059669; margin-top: 1px;">{impacto_financiero}</div>
                         </div>
-                        <div style="text-align: right; font-size: 0.68rem; color: #047857; max-width: 140px; line-height: 1.1;">
+                        <div style="text-align: right; font-size: 0.64rem; color: #047857; max-width: 120px; line-height: 1.1;">
                             Protección de perecederos y SLA
                         </div>
                     </div>
@@ -707,7 +816,7 @@ if st.session_state.active_tab == "operativo":
             btn_col1, btn_col2 = st.columns(2)
             with btn_col1:
                 if st.button(
-                    "✓ Aplicar Decisión", type="primary", use_container_width=True
+                    "✓ Aplicar", type="primary", use_container_width=True
                 ):
                     st.session_state.action_applied = True
                     nuevo_log = {
@@ -750,73 +859,21 @@ if st.session_state.active_tab == "operativo":
                     st.rerun()
         else:
             html("""
-                <div style="text-align: center; padding: 24px 0; color: #64748B;">
-                    <div style="font-size: 1.5rem; margin-bottom: 4px;">✨</div>
-                    <div style="font-size: 0.85rem; font-weight: 600; color: #0F172A;">No hay acciones pendientes</div>
-                    <div style="font-size: 0.74rem; margin-top: 2px;">Todas las recomendaciones de IA han sido procesadas.</div>
+                <div style="text-align: center; padding: 20px 0; color: #64748B;">
+                    <div style="font-size: 1.4rem; margin-bottom: 4px;">✨</div>
+                    <div style="font-size: 0.82rem; font-weight: 600; color: #0F172A;">No hay acciones pendientes</div>
+                    <div style="font-size: 0.72rem; margin-top: 2px;">Todas las recomendaciones han sido procesadas.</div>
                 </div>
             """)
 
         html("</div>")
 
-    # Sección Inferior
+    # Sección Inferior: Analítica de Desempeño Logístico (DCSA IoT Standard)
     st.markdown("<br>", unsafe_allow_html=True)
-
-    html(f"""
-    <div style="background: #111827; border-radius: 10px; padding: 16px; color: #fff; box-shadow: 0 1px 3px rgba(0,0,0,0.1); margin-bottom: 14px;">
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
-            <div>
-                <span style="font-size: 0.76rem; font-weight: 700; color: #9CA3AF; text-transform: uppercase; letter-spacing: 0.06em;">Historial de Temperatura Reefer (°C) por Hora</span>
-            </div>
-            <div style="display: flex; align-items: center; gap: 8px;">
-                <span style="font-size: 0.7rem; color: #38BDF8; background: rgba(56, 189, 248, 0.1); padding: 2px 6px; border-radius: 4px; border: 1px solid rgba(56, 189, 248, 0.2);">Setpoint: 1.5°C</span>
-                <span style="font-size: 0.7rem; color: #10B981; font-weight: 600;">● Monitoreo En Vivo</span>
-            </div>
-        </div>
-        
-        <div style="display: flex; align-items: flex-end; justify-content: space-between; height: 100px; padding-bottom: 4px; border-bottom: 1px solid #374151;">
-            <div style="text-align: center; flex: 1;">
-                <span style="font-size: 10px; font-weight: 700; color: #38BDF8; display: block; margin-bottom: 3px;">1.4°</span>
-                <div style="background: #3B82F6; height: 38px; width: 8px; margin: 0 auto; border-radius: 4px 4px 0 0;"></div>
-                <span style="font-size: 10px; color: #9CA3AF; display: block; margin-top: 4px;">12:00</span>
-            </div>
-            <div style="text-align: center; flex: 1;">
-                <span style="font-size: 10px; font-weight: 700; color: #38BDF8; display: block; margin-bottom: 3px;">1.5°</span>
-                <div style="background: #3B82F6; height: 44px; width: 8px; margin: 0 auto; border-radius: 4px 4px 0 0;"></div>
-                <span style="font-size: 10px; color: #9CA3AF; display: block; margin-top: 4px;">13:00</span>
-            </div>
-            <div style="text-align: center; flex: 1;">
-                <span style="font-size: 10px; font-weight: 700; color: #38BDF8; display: block; margin-bottom: 3px;">1.5°</span>
-                <div style="background: #3B82F6; height: 42px; width: 8px; margin: 0 auto; border-radius: 4px 4px 0 0;"></div>
-                <span style="font-size: 10px; color: #9CA3AF; display: block; margin-top: 4px;">14:00</span>
-            </div>
-            <div style="text-align: center; flex: 1;">
-                <span style="font-size: 10px; font-weight: 700; color: #F59E0B; display: block; margin-bottom: 3px;">{base_temp:.1f}°</span>
-                <div style="background: #F59E0B; height: 62px; width: 8px; margin: 0 auto; border-radius: 4px 4px 0 0;"></div>
-                <span style="font-size: 10px; color: #9CA3AF; display: block; margin-top: 4px;">15:00</span>
-            </div>
-            <div style="text-align: center; flex: 1;">
-                <span style="font-size: 10px; font-weight: 700; color: #38BDF8; display: block; margin-bottom: 3px;">1.6°</span>
-                <div style="background: #3B82F6; height: 46px; width: 8px; margin: 0 auto; border-radius: 4px 4px 0 0;"></div>
-                <span style="font-size: 10px; color: #9CA3AF; display: block; margin-top: 4px;">16:00</span>
-            </div>
-            <div style="text-align: center; flex: 1;">
-                <span style="font-size: 10px; font-weight: 700; color: #38BDF8; display: block; margin-bottom: 3px;">1.5°</span>
-                <div style="background: #3B82F6; height: 43px; width: 8px; margin: 0 auto; border-radius: 4px 4px 0 0;"></div>
-                <span style="font-size: 10px; color: #9CA3AF; display: block; margin-top: 4px;">17:00</span>
-            </div>
-            <div style="text-align: center; flex: 1;">
-                <span style="font-size: 10px; font-weight: 700; color: #38BDF8; display: block; margin-bottom: 3px;">1.5°</span>
-                <div style="background: #3B82F6; height: 41px; width: 8px; margin: 0 auto; border-radius: 4px 4px 0 0;"></div>
-                <span style="font-size: 10px; color: #9CA3AF; display: block; margin-top: 4px;">18:00</span>
-            </div>
-        </div>
-    </div>
-    """)
 
     html("""
     <div class="dashboard-card">
-        <div class="card-title" style="margin-bottom: 8px;">📈 Analítica de Desempeño Logístico (DCSA IoT Standard)</div>
+        <div style="font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.06em; color: #64748B; font-weight: 700; margin-bottom: 8px;">📈 Analítica de Desempeño Logístico (DCSA IoT Standard)</div>
         <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; text-align: center;">
             <div style="background: #F8FAFC; padding: 10px; border-radius: 6px; border: 1px solid #E2E8F0;">
                 <span style="font-size: 0.7rem; color: #64748B; text-transform: uppercase; font-weight: 700;">Eficiencia de Ruta</span><br>
@@ -927,36 +984,36 @@ elif st.session_state.active_tab == "mapa":
     with m_col1:
         html("""
         <div class="dashboard-card">
-            <div class="card-title">Conductor Asignado</div>
+            <div style="font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.06em; color: #64748B; font-weight: 700; margin-bottom: 6px;">Conductor Asignado</div>
             <div style="font-size: 1.05rem; font-weight: 700; color: #0F172A;">C. Ramírez</div>
-            <div class="sub-detail">Licencia: <b>CAT-C3 (Verificada)</b></div>
+            <div style="font-size: 0.76rem; color: #64748B; margin-top: 4px;">Licencia: <b>CAT-C3 (Verificada)</b></div>
         </div>
         """)
 
     with m_col2:
         html("""
         <div class="dashboard-card">
-            <div class="card-title">Unidad de Transporte</div>
+            <div style="font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.06em; color: #64748B; font-weight: 700; margin-bottom: 6px;">Unidad de Transporte</div>
             <div style="font-size: 1.05rem; font-weight: 700; color: #0F172A;">SXK-482</div>
-            <div class="sub-detail">Tractor 3S3 (#C-114)</div>
+            <div style="font-size: 0.76rem; color: #64748B; margin-top: 4px;">Tractor 3S3 (#C-114)</div>
         </div>
         """)
 
     with m_col3:
         html(f"""
         <div class="dashboard-card">
-            <div class="card-title">Clima en Posición GPS</div>
+            <div style="font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.06em; color: #64748B; font-weight: 700; margin-bottom: 6px;">Clima en Posición GPS</div>
             <div style="font-size: 1.05rem; font-weight: 700; color: #0F172A;">{ext_temp} °C</div>
-            <div class="sub-detail">Condición: <b>Cálido / Despejado</b></div>
+            <div style="font-size: 0.76rem; color: #64748B; margin-top: 4px;">Condición: <b>Cálido / Despejado</b></div>
         </div>
         """)
 
     with m_col4:
         html(f"""
         <div class="dashboard-card">
-            <div class="card-title">Estado del Viaje</div>
+            <div style="font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.06em; color: #64748B; font-weight: 700; margin-bottom: 6px;">Estado del Viaje</div>
             <div style="font-size: 1.05rem; font-weight: 700; color: #0284C7;">65% Completado</div>
-            <div class="sub-detail">Distancia: <b>687 / 1058 km</b></div>
+            <div style="font-size: 0.76rem; color: #64748B; margin-top: 4px;">Distancia: <b>687 / 1058 km</b></div>
         </div>
         """)
 
@@ -966,6 +1023,5 @@ elif st.session_state.active_tab == "logs":
         "Registro cronológico en tiempo real de eventos del Gateway IoT, decisiones ejecutadas por el operador y recomendaciones de la IA."
     )
 
-    # Convertir la lista de session_state directamente a un DataFrame limpio para renderizar sin retrasos
     df_logs = pd.DataFrame(st.session_state.audit_logs)
     st.dataframe(df_logs, use_container_width=True, hide_index=True)
